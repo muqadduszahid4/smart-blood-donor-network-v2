@@ -6,9 +6,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../data/models/request_model.dart';
 import '../../../data/models/donor_model.dart';
 import 'manage_hospitals_screen.dart';
-import 'medical_verification_requests_screen.dart';
-import '../../../providers/report_provider.dart';
-import '../../../data/models/report_model.dart';
+import 'eligibility_exceptions_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -35,8 +33,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Map<String, int> _bloodGroupCounts = {};
 
-  List<ReportModel> _reports = [];
-
   @override
   void initState() {
     super.initState();
@@ -56,13 +52,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final requestProvider = Provider.of<RequestProvider>(context, listen: false);
     final donorProvider = Provider.of<DonorProvider>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final reportProvider = Provider.of<ReportProvider>(context, listen: false);
 
     final requests = await requestProvider.fetchActiveRequests();
     final pending = await requestProvider.fetchPendingRequests();
     final donors = await donorProvider.fetchAllDonors();
     final requesters = await authProvider.fetchUsersByRole('requester');
-    final reports = await reportProvider.fetchPendingReports();
 
     final Map<String, int> counts = {};
     for (final donor in donors) {
@@ -82,7 +76,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         _filteredRequesters = requesters;
         _bloodGroupCounts = counts;
         _totalUsers = donors.length + requesters.length;
-        _reports = reports;
         _isLoading = false;
       });
     }
@@ -223,36 +216,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
-  Future<void> _dismissReport(ReportModel report) async {
-    final reportProvider = Provider.of<ReportProvider>(context, listen: false);
-    bool success = await reportProvider.dismissReport(report.id);
-    if (success && mounted) {
-      setState(() => _reports.remove(report));
-      _showSnack('Report dismissed');
-    }
-  }
-
-  Future<void> _actionReport(ReportModel report) async {
-    final reportProvider = Provider.of<ReportProvider>(context, listen: false);
-
-    if (report.targetType == 'donor') {
-      final donorProvider = Provider.of<DonorProvider>(context, listen: false);
-      await donorProvider.toggleDonorActiveStatus(report.targetId, false);
-    } else if (report.targetType == 'request') {
-      final requestProvider = Provider.of<RequestProvider>(context, listen: false);
-      await requestProvider.rejectRequest(report.targetId);
-    }
-
-    bool success = await reportProvider.markActioned(report.id);
-    if (success && mounted) {
-      setState(() => _reports.remove(report));
-      _showSnack(report.targetType == 'donor'
-          ? 'Donor deactivated'
-          : 'Request rejected');
-      _loadStats();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -386,12 +349,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
             Card(
               child: ListTile(
-                leading: const Icon(Icons.health_and_safety, color: Colors.purple),
-                title: const Text('Medical verification requests'),
-                subtitle: const Text('Review donor health submissions'),
+                leading: const Icon(Icons.event_available, color: Colors.deepOrange),
+                title: const Text('Early donation requests'),
+                subtitle: const Text('Donors requesting to donate before the 56-day mark'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const MedicalVerificationRequestsScreen())),
+                    MaterialPageRoute(builder: (_) => const EligibilityExceptionsScreen())),
               ),
             ),
             const SizedBox(height: 24),
@@ -481,68 +444,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ),
                 );
               }),
-            const SizedBox(height: 24),
-
-            const Text('Reported content',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            ..._reports.map((report) => Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                            report.targetType == 'donor'
-                                ? Icons.person
-                                : Icons.emergency,
-                            color: Colors.red),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(report.targetLabel,
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text('Reason: ${report.reason}',
-                        style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                    Text('Reported by ${report.reporterName}',
-                        style: TextStyle(color: Colors.grey[500], fontSize: 11)),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _dismissReport(report),
-                            child: const Text('Dismiss'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red[700],
-                                foregroundColor: Colors.white),
-                            onPressed: () => _actionReport(report),
-                            child: Text(report.targetType == 'donor'
-                                ? 'Deactivate donor'
-                                : 'Reject request'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            )),
-            if (_reports.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No pending reports'),
-              ),
             const SizedBox(height: 24),
 
             const Text('Hospitals & blood banks',

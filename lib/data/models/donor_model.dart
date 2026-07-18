@@ -5,6 +5,7 @@ class DonorModel {
   final int age;
   final String gender;
   final String city;
+  final String address;
   final double latitude;
   final double longitude;
   final String phone;
@@ -21,6 +22,7 @@ class DonorModel {
     required this.age,
     required this.gender,
     required this.city,
+    this.address = '',
     required this.latitude,
     required this.longitude,
     required this.phone,
@@ -39,6 +41,7 @@ class DonorModel {
       'age': age,
       'gender': gender,
       'city': city,
+      'address': address,
       'latitude': latitude,
       'longitude': longitude,
       'phone': phone,
@@ -58,6 +61,7 @@ class DonorModel {
       age: map['age'] ?? 0,
       gender: map['gender'] ?? '',
       city: map['city'] ?? '',
+      address: map['address'] ?? '',
       latitude: (map['latitude'] ?? 0).toDouble(),
       longitude: (map['longitude'] ?? 0).toDouble(),
       phone: map['phone'] ?? '',
@@ -84,6 +88,7 @@ class DonorModel {
       age: age,
       gender: gender,
       city: city,
+      address: address,
       latitude: latitude,
       longitude: longitude,
       phone: phone,

@@ -4,8 +4,6 @@ class MedicalVerificationModel {
   final double height;
   final String bloodPressure;
   final Map<String, bool> healthAnswers;
-  final String verificationStatus; // 'pending', 'approved', 'rejected'
-  final String? rejectionReason;
   final DateTime submittedAt;
 
   MedicalVerificationModel({
@@ -14,8 +12,6 @@ class MedicalVerificationModel {
     required this.height,
     required this.bloodPressure,
     required this.healthAnswers,
-    this.verificationStatus = 'pending',
-    this.rejectionReason,
     required this.submittedAt,
   });
 
@@ -26,8 +22,6 @@ class MedicalVerificationModel {
       'height': height,
       'bloodPressure': bloodPressure,
       'healthAnswers': healthAnswers,
-      'verificationStatus': verificationStatus,
-      'rejectionReason': rejectionReason,
       'submittedAt': submittedAt.toIso8601String(),
     };
   }
@@ -39,8 +33,6 @@ class MedicalVerificationModel {
       height: (map['height'] ?? 0).toDouble(),
       bloodPressure: map['bloodPressure'] ?? '',
       healthAnswers: Map<String, bool>.from(map['healthAnswers'] ?? {}),
-      verificationStatus: map['verificationStatus'] ?? 'pending',
-      rejectionReason: map['rejectionReason'],
       submittedAt: map['submittedAt'] != null
           ? DateTime.parse(map['submittedAt'])
           : DateTime.now(),

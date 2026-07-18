@@ -137,4 +137,32 @@ class AuthProvider extends ChangeNotifier {
       return false;
     }
   }
+
+  // ===== Self-service profile editing =====
+  Future<Map<String, dynamic>?> fetchUserProfile(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      return doc.data();
+    } catch (e) {
+      errorMessage = e.toString();
+      return null;
+    }
+  }
+
+  Future<bool> updateUserProfile(
+      String uid, String name, String phone, String city, String address) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': name,
+        'phone': phone,
+        'city': city,
+        'address': address,
+      }, SetOptions(merge: true));
+      await _auth.currentUser?.updateDisplayName(name);
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      return false;
+    }
+  }
 }

@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../providers/donor_provider.dart';
 import '../../../providers/auth_provider.dart';
@@ -10,7 +8,7 @@ import '../../../core/utils/blood_compatibility.dart';
 import '../../../providers/report_provider.dart';
 import '../../../data/models/report_model.dart';
 
-enum _SortMode { nearest, mostDonations, recentlyJoined }
+enum _SortMode { alphabetical, mostDonations, recentlyJoined }
 
 class NearbyDonorsScreen extends StatefulWidget {
   const NearbyDonorsScreen({super.key});
@@ -24,24 +22,23 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
     'All',
     'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
   ];
-  static const List<int> _radiusOptions = [5, 10, 25, 50, 100];
 
   String _selectedBloodGroup = 'All';
-  int _selectedRadiusKm = 25;
+  String _selectedCity = 'All cities';
   bool _includeCompatible = false;
   bool _favoritesOnly = false;
-  _SortMode _sortMode = _SortMode.nearest;
+  _SortMode _sortMode = _SortMode.alphabetical;
 
   bool _isLoading = true;
   String? _errorMessage;
-  Position? _myPosition;
 
   List<DonorModel> _allDonors = [];
+  List<String> _availableCities = ['All cities'];
   Set<String> _favoriteIds = {};
   Map<String, bool> _verifiedStatus = {};
   Map<String, int> _donationCounts = {};
 
-  List<_DonorWithDistance> _filteredDonors = [];
+  List<DonorModel> _filteredDonors = [];
 
   @override
   void initState() {
@@ -56,24 +53,6 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
     });
 
     try {
-      Position? position;
-      try {
-        position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium,
-        ).timeout(const Duration(seconds: 8));
-      } catch (_) {
-        position = await Geolocator.getLastKnownPosition();
-      }
-
-      if (position == null) {
-        setState(() {
-          _errorMessage =
-          'Could not get your location. Please enable location and try again.';
-          _isLoading = false;
-        });
-        return;
-      }
-
       final donorProvider = Provider.of<DonorProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final user = authProvider.currentUser;
@@ -83,12 +62,19 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
           ? await donorProvider.fetchFavoriteDonorIds(user.uid)
           : <String>{};
 
-      _myPosition = position;
       _allDonors = donors;
       _favoriteIds = favoriteIds;
 
-      _applyFilters();
+      final cities = donors
+          .where((d) => d.isActive)
+          .map((d) => d.city.trim())
+          .where((c) => c.isNotEmpty)
+          .toSet()
+          .toList();
+      cities.sort();
+      _availableCities = ['All cities', ...cities];
 
+      _applyFilters();
       await _loadBadgeDataForVisibleDonors();
 
       setState(() => _isLoading = false);
@@ -104,16 +90,15 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
     final donorProvider = Provider.of<DonorProvider>(context, listen: false);
     final futures = <Future>[];
 
-    for (final entry in _filteredDonors) {
-      final donorId = entry.donor.uid;
-      if (!_verifiedStatus.containsKey(donorId)) {
-        futures.add(donorProvider.fetchMedicalVerification(donorId).then((record) {
-          _verifiedStatus[donorId] = record?.verificationStatus == 'approved';
+    for (final donor in _filteredDonors) {
+      if (!_verifiedStatus.containsKey(donor.uid)) {
+        futures.add(donorProvider.fetchMedicalVerification(donor.uid).then((record) {
+          _verifiedStatus[donor.uid] = record != null;
         }));
       }
-      if (!_donationCounts.containsKey(donorId)) {
-        futures.add(donorProvider.fetchDonationHistory(donorId).then((history) {
-          _donationCounts[donorId] = history.length;
+      if (!_donationCounts.containsKey(donor.uid)) {
+        futures.add(donorProvider.fetchDonationHistory(donor.uid).then((history) {
+          _donationCounts[donor.uid] = history.length;
         }));
       }
     }
@@ -123,8 +108,6 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
   }
 
   void _applyFilters() {
-    if (_myPosition == null) return;
-
     List<String> allowedGroups;
     if (_selectedBloodGroup == 'All') {
       allowedGroups = _bloodGroups.skip(1).toList();
@@ -134,46 +117,35 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
       allowedGroups = [_selectedBloodGroup];
     }
 
-    var withDistance = _allDonors
+    var results = _allDonors
         .where((d) => d.isActive && d.isAvailable)
         .where((d) => allowedGroups.contains(d.bloodGroup))
-        .map((d) {
-      final distanceMeters = Geolocator.distanceBetween(
-        _myPosition!.latitude,
-        _myPosition!.longitude,
-        d.latitude,
-        d.longitude,
-      );
-      return _DonorWithDistance(
-        donor: d,
-        distanceKm: distanceMeters / 1000,
-        isExactMatch: _selectedBloodGroup == 'All' ||
-            BloodCompatibility.isExactMatch(d.bloodGroup, _selectedBloodGroup),
-      );
-    }).where((entry) => entry.distanceKm <= _selectedRadiusKm).toList();
+        .where((d) =>
+    _selectedCity == 'All cities' ||
+        d.city.trim().toLowerCase() == _selectedCity.toLowerCase())
+        .toList();
 
     if (_favoritesOnly) {
-      withDistance =
-          withDistance.where((e) => _favoriteIds.contains(e.donor.uid)).toList();
+      results = results.where((d) => _favoriteIds.contains(d.uid)).toList();
     }
 
     switch (_sortMode) {
-      case _SortMode.nearest:
-        withDistance.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+      case _SortMode.alphabetical:
+        results.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         break;
       case _SortMode.mostDonations:
-        withDistance.sort((a, b) {
-          final countA = _donationCounts[a.donor.uid] ?? 0;
-          final countB = _donationCounts[b.donor.uid] ?? 0;
+        results.sort((a, b) {
+          final countA = _donationCounts[a.uid] ?? 0;
+          final countB = _donationCounts[b.uid] ?? 0;
           return countB.compareTo(countA);
         });
         break;
       case _SortMode.recentlyJoined:
-        withDistance.sort((a, b) => b.donor.createdAt.compareTo(a.donor.createdAt));
+        results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
     }
 
-    setState(() => _filteredDonors = withDistance);
+    setState(() => _filteredDonors = results);
     _loadBadgeDataForVisibleDonors();
   }
 
@@ -261,7 +233,7 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(success ? 'Report submitted to admin' : 'Could not submit, try again')));
+          content: Text(success ? 'Report submitted' : 'Could not submit, try again')));
     }
   }
 
@@ -299,7 +271,7 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
 
     final message = Uri.encodeComponent(
         'Hi ${donor.name}, this is $myName from Smart Blood Donor Network. '
-            'I saw you\'re a ${donor.bloodGroup} donor near me — could you help with an urgent blood need?');
+            'I saw you\'re a ${donor.bloodGroup} donor in ${donor.city} — could you help with an urgent blood need?');
 
     final uri = Uri.parse('https://wa.me/$phone?text=$message');
     if (await canLaunchUrl(uri)) {
@@ -364,22 +336,22 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _selectedRadiusKm,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedCity,
                     decoration: InputDecoration(
-                      labelText: 'Within',
+                      labelText: 'City',
                       border:
                       OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       isDense: true,
                       contentPadding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
-                    items: _radiusOptions
-                        .map((r) => DropdownMenuItem(value: r, child: Text('$r km')))
+                    items: _availableCities
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                         .toList(),
                     onChanged: (value) {
                       if (value == null) return;
-                      _selectedRadiusKm = value;
+                      _selectedCity = value;
                       _applyFilters();
                     },
                   ),
@@ -424,16 +396,17 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
                       _applyFilters();
                     },
                     itemBuilder: (ctx) => const [
-                      PopupMenuItem(value: _SortMode.nearest, child: Text('Nearest first')),
+                      PopupMenuItem(
+                          value: _SortMode.alphabetical, child: Text('Name (A-Z)')),
                       PopupMenuItem(
                           value: _SortMode.mostDonations, child: Text('Most donations')),
                       PopupMenuItem(
                           value: _SortMode.recentlyJoined, child: Text('Recently joined')),
                     ],
-                    child: Chip(
+                    child: const Chip(
                       label: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           Icon(Icons.sort, size: 16),
                           SizedBox(width: 4),
                           Text('Sort'),
@@ -448,13 +421,12 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
           const SizedBox(height: 8),
           Expanded(
             child: _filteredDonors.isEmpty
-                ? const Center(child: Text('No matching donors found nearby'))
+                ? const Center(child: Text('No matching donors found'))
                 : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               itemCount: _filteredDonors.length,
               itemBuilder: (context, index) {
-                final entry = _filteredDonors[index];
-                final donor = entry.donor;
+                final donor = _filteredDonors[index];
                 final isVerified = _verifiedStatus[donor.uid] ?? false;
                 final donationCount = _donationCounts[donor.uid];
                 final isFav = _favoriteIds.contains(donor.uid);
@@ -486,20 +458,34 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
                                   Text(
                                     donor.name.isNotEmpty ? donor.name : 'Unnamed donor',
                                     style:
-                                    const TextStyle(fontWeight: FontWeight.w600),
+                                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    '${donor.city} • ${entry.distanceKm.toStringAsFixed(1)} km away',
-                                    style:
-                                    TextStyle(color: Colors.grey[600], fontSize: 12),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.location_on, size: 12, color: Colors.grey[600]),
+                                      const SizedBox(width: 2),
+                                      Expanded(
+                                        child: Text(
+                                          donor.address.isNotEmpty
+                                              ? '${donor.address}, ${donor.city}'
+                                              : donor.city,
+                                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                  const SizedBox(height: 2),
+                                  Text(donor.phone,
+                                      style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                                   const SizedBox(height: 6),
                                   Wrap(
                                     spacing: 6,
                                     runSpacing: 4,
                                     children: [
-                                      if (!entry.isExactMatch)
+                                      if (donor.bloodGroup != _selectedBloodGroup &&
+                                          _selectedBloodGroup != 'All')
                                         Chip(
                                           label: const Text('Compatible',
                                               style: TextStyle(fontSize: 10)),
@@ -511,7 +497,7 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
                                         Chip(
                                           avatar: const Icon(Icons.verified,
                                               size: 14, color: Colors.green),
-                                          label: const Text('Verified',
+                                          label: const Text('Info shared',
                                               style: TextStyle(fontSize: 10)),
                                           backgroundColor: Colors.green[50],
                                           visualDensity: VisualDensity.compact,
@@ -613,16 +599,4 @@ class _NearbyDonorsScreenState extends State<NearbyDonorsScreen> {
       ),
     );
   }
-}
-
-class _DonorWithDistance {
-  final DonorModel donor;
-  final double distanceKm;
-  final bool isExactMatch;
-
-  _DonorWithDistance({
-    required this.donor,
-    required this.distanceKm,
-    required this.isExactMatch,
-  });
 }

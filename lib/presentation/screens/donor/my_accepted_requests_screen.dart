@@ -80,10 +80,46 @@ class _MyAcceptedRequestsScreenState extends State<MyAcceptedRequestsScreen> {
     }
   }
 
+  Future<void> _resubmitMedical(RequestModel request) async {
+    final requestProvider = Provider.of<RequestProvider>(context, listen: false);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Resubmit medical report?'),
+        content: const Text(
+            'Make sure you\'ve updated your Medical Verification details before resubmitting — this sends it back to the same requester for review.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Resubmit'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    bool success = await requestProvider.resubmitMedicalToRequester(request.id);
+    if (success && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Resubmitted to requester')));
+      _load();
+    }
+  }
+
   Future<void> _confirmCompleted(RequestModel request) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
     if (user == null) return;
+
+    if (request.requesterMedicalStatus != 'approved') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'The requester must approve your medical report before you can complete this donation')));
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -135,6 +171,75 @@ class _MyAcceptedRequestsScreenState extends State<MyAcceptedRequestsScreen> {
             : 'Request marked completed, but saving to your history failed')),
       );
       setState(() => _accepted.remove(request));
+    }
+  }
+
+  Widget _medicalStatusBanner(RequestModel request) {
+    switch (request.requesterMedicalStatus) {
+      case 'approved':
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            children: const [
+              Icon(Icons.check_circle, color: Colors.green, size: 16),
+              SizedBox(width: 6),
+              Expanded(
+                  child: Text('Requester approved your medical report',
+                      style: TextStyle(color: Colors.green, fontSize: 12))),
+            ],
+          ),
+        );
+      case 'rejected':
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: Colors.red[50], borderRadius: BorderRadius.circular(8)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.error_outline, color: Colors.red, size: 16),
+                  SizedBox(width: 6),
+                  Text('Requester rejected your report',
+                      style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
+                ],
+              ),
+              if (request.requesterMedicalRejectionReason != null) ...[
+                const SizedBox(height: 4),
+                Text('Reason: ${request.requesterMedicalRejectionReason}',
+                    style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ],
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                  onPressed: () => _resubmitMedical(request),
+                  child: const Text('I\'ve updated it — resubmit'),
+                ),
+              ),
+            ],
+          ),
+        );
+      case 'pending':
+      default:
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: Colors.amber[50], borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            children: const [
+              Icon(Icons.hourglass_bottom, color: Colors.orange, size: 16),
+              SizedBox(width: 6),
+              Expanded(
+                  child: Text('Waiting for requester to review your medical report',
+                      style: TextStyle(color: Colors.orange, fontSize: 12))),
+            ],
+          ),
+        );
     }
   }
 
@@ -204,7 +309,9 @@ class _MyAcceptedRequestsScreenState extends State<MyAcceptedRequestsScreen> {
                     const SizedBox(height: 8),
                     Text(request.notes, style: TextStyle(color: Colors.grey[700])),
                   ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
+                  _medicalStatusBanner(request),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -229,7 +336,9 @@ class _MyAcceptedRequestsScreenState extends State<MyAcceptedRequestsScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
+                          backgroundColor: request.requesterMedicalStatus == 'approved'
+                              ? Colors.green[700]
+                              : Colors.grey[400],
                           foregroundColor: Colors.white),
                       icon: const Icon(Icons.check_circle),
                       label: const Text('Mark as completed'),

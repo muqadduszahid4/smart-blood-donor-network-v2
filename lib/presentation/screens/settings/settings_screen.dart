@@ -5,6 +5,8 @@ import '../../../providers/auth_provider.dart';
 import '../../../core/localization/app_locale_provider.dart';
 import '../../../core/localization/app_strings.dart';
 import '../auth/login_screen.dart';
+import '../../../core/theme/theme_provider.dart';
+import 'edit_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,7 +16,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _darkMode = false;
   bool _emergencyAlerts = true;
   bool _requestUpdates = true;
   bool _donationReminders = true;
@@ -30,7 +31,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _darkMode = prefs.getBool('dark_mode') ?? false;
       _emergencyAlerts = prefs.getBool('notif_emergency') ?? true;
       _requestUpdates = prefs.getBool('notif_requests') ?? true;
       _donationReminders = prefs.getBool('notif_reminders') ?? true;
@@ -125,16 +125,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         body: ListView(
           children: [
             _SectionHeader(AppStrings.get(context, 'appearance')),
-            SwitchListTile(
-              secondary: const Icon(Icons.dark_mode),
-              title: Text(AppStrings.get(context, 'dark_mode')),
-              subtitle: Text(AppStrings.get(context, 'dark_mode_subtitle')),
-              value: _darkMode,
-              onChanged: (value) {
-                setState(() => _darkMode = value);
-                _setPref('dark_mode', value);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Restart the app to apply the new theme')));
+            Consumer<ThemeProvider>(
+              builder: (context, themeProvider, _) {
+                return SwitchListTile(
+                  secondary: const Icon(Icons.dark_mode),
+                  title: Text(AppStrings.get(context, 'dark_mode')),
+                  subtitle: const Text('Applies instantly'),
+                  value: themeProvider.isDarkMode,
+                  onChanged: (value) => themeProvider.setDarkMode(value),
+                );
               },
             ),
             const Divider(),
@@ -186,6 +185,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Divider(),
 
             _SectionHeader(AppStrings.get(context, 'account')),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Edit profile'),
+              subtitle: const Text('Update your name and phone number'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => const EditProfileScreen())),
+            ),
             ListTile(
               leading: const Icon(Icons.language),
               title: Text(AppStrings.get(context, 'language')),

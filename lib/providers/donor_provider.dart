@@ -137,13 +137,38 @@ class DonorProvider extends ChangeNotifier {
     }
   }
 
-  // ===== Medical verification =====
+  Future<bool> deleteDonation(String donationId, String donorId) async {
+    try {
+      await _donationsRef.doc(donationId).delete();
+
+      // Recalculate lastDonationDate from whatever donations remain, so
+      // eligibility countdown stays accurate after a deletion.
+      final remaining = await fetchDonationHistory(donorId);
+      if (remaining.isEmpty) {
+        await _donorsRef.doc(donorId).update({'lastDonationDate': null});
+      } else {
+        final mostRecent = remaining.first; // fetchDonationHistory already sorts newest-first
+        await _donorsRef.doc(donorId).update({
+          'lastDonationDate': mostRecent.date.toIso8601String(),
+        });
+      }
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      return false;
+    }
+  }
+
+  // ===== Medical information (donor <-> requester only, no admin gate) =====
   final CollectionReference _medicalRef =
   FirebaseFirestore.instance.collection('medicalVerification');
 
   Future<bool> submitMedicalVerification(MedicalVerificationModel record) async {
     try {
       await _medicalRef.doc(record.donorId).set(record.toMap());
+      // Submitting health info marks the donor's profile as having shared
+      // it — visible to requesters once they view an accepted request.
+      await _donorsRef.doc(record.donorId).update({'isMedicallyEligible': true});
       return true;
     } catch (e) {
       errorMessage = e.toString();
@@ -164,50 +189,7 @@ class DonorProvider extends ChangeNotifier {
     }
   }
 
-  Future<List<MedicalVerificationModel>> fetchPendingVerifications() async {
-    try {
-      final snapshot =
-      await _medicalRef.where('verificationStatus', isEqualTo: 'pending').get();
-      final results = snapshot.docs
-          .map((doc) => MedicalVerificationModel.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
-      results.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
-      return results;
-    } catch (e) {
-      errorMessage = e.toString();
-      return [];
-    }
-  }
-
-  Future<bool> approveMedicalVerification(String donorId) async {
-    try {
-      await _medicalRef.doc(donorId).update({
-        'verificationStatus': 'approved',
-        'rejectionReason': null,
-      });
-      await _donorsRef.doc(donorId).update({'isMedicallyEligible': true});
-      return true;
-    } catch (e) {
-      errorMessage = e.toString();
-      return false;
-    }
-  }
-
-  Future<bool> rejectMedicalVerification(String donorId, String reason) async {
-    try {
-      await _medicalRef.doc(donorId).update({
-        'verificationStatus': 'rejected',
-        'rejectionReason': reason,
-      });
-      await _donorsRef.doc(donorId).update({'isMedicallyEligible': false});
-      return true;
-    } catch (e) {
-      errorMessage = e.toString();
-      return false;
-    }
-  }
-
-  // ===== Favorites (persisted in Firestore, not just on-device) =====
+  // ===== Favorites =====
   final CollectionReference _favoritesRef =
   FirebaseFirestore.instance.collection('favorites');
 

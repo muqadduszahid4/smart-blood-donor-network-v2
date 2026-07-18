@@ -26,6 +26,7 @@ class RequestProvider extends ChangeNotifier {
         bloodGroup: request.bloodGroup,
         units: request.units,
         hospitalName: request.hospitalName,
+        city: request.city,
         notes: request.notes,
         latitude: request.latitude,
         longitude: request.longitude,
@@ -119,6 +120,33 @@ class RequestProvider extends ChangeNotifier {
     }
   }
 
+  // Requester edits their own request's details while it's still
+  // pending admin approval or active and not yet accepted by a donor.
+  Future<bool> updateRequest({
+    required String requestId,
+    required String bloodGroup,
+    required int units,
+    required String hospitalName,
+    String? city,
+    String? requesterPhone,
+    required String notes,
+  }) async {
+    try {
+      await _requestsRef.doc(requestId).update({
+        'bloodGroup': bloodGroup,
+        'units': units,
+        'hospitalName': hospitalName,
+        'city': city,
+        'requesterPhone': requesterPhone,
+        'notes': notes,
+      });
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      return false;
+    }
+  }
+
   Future<bool> acceptRequest(
       String requestId, String donorId, String donorName, String? donorPhone) async {
     try {
@@ -127,6 +155,8 @@ class RequestProvider extends ChangeNotifier {
         'donorId': donorId,
         'acceptedByName': donorName,
         'donorPhone': donorPhone,
+        'requesterMedicalStatus': 'pending',
+        'requesterMedicalRejectionReason': null,
       });
       await NotificationService.showNotification(
         title: 'Request accepted ✅',
@@ -215,6 +245,63 @@ class RequestProvider extends ChangeNotifier {
     } catch (e) {
       errorMessage = e.toString();
       return [];
+    }
+  }
+
+  // ===== Requester-level review of the donor's (already admin-approved)
+  // medical report, specific to this one request =====
+
+  Future<bool> approveMedicalByRequester(String requestId) async {
+    try {
+      await _requestsRef.doc(requestId).update({
+        'requesterMedicalStatus': 'approved',
+        'requesterMedicalRejectionReason': null,
+      });
+      await NotificationService.showNotification(
+        title: 'Medical report approved',
+        body: 'The requester approved your medical report.',
+      );
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      return false;
+    }
+  }
+
+  Future<bool> rejectMedicalByRequester(String requestId, String reason) async {
+    try {
+      await _requestsRef.doc(requestId).update({
+        'requesterMedicalStatus': 'rejected',
+        'requesterMedicalRejectionReason': reason,
+      });
+      await NotificationService.showNotification(
+        title: 'Medical report needs changes',
+        body: 'The requester asked you to review and update your medical report.',
+      );
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      return false;
+    }
+  }
+
+  // Donor calls this after updating their health info in response to a
+  // requester's rejection — sends it back to that SAME requester only,
+  // never re-enters the admin approval queue.
+  Future<bool> resubmitMedicalToRequester(String requestId) async {
+    try {
+      await _requestsRef.doc(requestId).update({
+        'requesterMedicalStatus': 'pending',
+        'requesterMedicalRejectionReason': null,
+      });
+      await NotificationService.showNotification(
+        title: 'Medical report resubmitted',
+        body: 'Your updated medical report has been sent to the requester for review.',
+      );
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      return false;
     }
   }
 }

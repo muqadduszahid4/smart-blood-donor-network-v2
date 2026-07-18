@@ -21,7 +21,7 @@ class _MedicalVerificationScreenState extends State<MedicalVerificationScreen> {
 
   bool _isLoading = true;
   bool _isSubmitting = false;
-  MedicalVerificationModel? _existing;
+  bool _hasExisting = false;
 
   @override
   void initState() {
@@ -36,13 +36,14 @@ class _MedicalVerificationScreenState extends State<MedicalVerificationScreen> {
     final user = authProvider.currentUser;
 
     if (user != null) {
-      _existing = await donorProvider.fetchMedicalVerification(user.uid);
-      if (_existing != null) {
-        _weightController.text = _existing!.weight.toString();
-        _heightController.text = _existing!.height.toString();
-        _bpController.text = _existing!.bloodPressure;
+      final existing = await donorProvider.fetchMedicalVerification(user.uid);
+      if (existing != null) {
+        _hasExisting = true;
+        _weightController.text = existing.weight.toString();
+        _heightController.text = existing.height.toString();
+        _bpController.text = existing.bloodPressure;
         for (final key in MedicalVerificationModel.healthQuestionKeys) {
-          _answers[key] = _existing!.healthAnswers[key] ?? false;
+          _answers[key] = existing.healthAnswers[key] ?? false;
         }
       }
     }
@@ -71,7 +72,6 @@ class _MedicalVerificationScreenState extends State<MedicalVerificationScreen> {
       height: height,
       bloodPressure: _bpController.text.trim(),
       healthAnswers: _answers,
-      verificationStatus: 'pending',
       submittedAt: DateTime.now(),
     );
 
@@ -81,55 +81,18 @@ class _MedicalVerificationScreenState extends State<MedicalVerificationScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(success
-              ? 'Submitted — pending admin review'
+              ? 'Saved — requesters will see this after you accept their request'
               : 'Something went wrong, please try again')));
-      if (success) _load();
+      if (success) {
+        setState(() => _hasExisting = true);
+      }
     }
-  }
-
-  Widget _statusBanner() {
-    if (_existing == null) return const SizedBox.shrink();
-
-    Color color;
-    IconData icon;
-    String text;
-
-    switch (_existing!.verificationStatus) {
-      case 'approved':
-        color = Colors.green;
-        icon = Icons.verified;
-        text = 'Approved — you are medically verified';
-        break;
-      case 'rejected':
-        color = Colors.red;
-        icon = Icons.cancel;
-        text = 'Rejected${_existing!.rejectionReason != null ? ": ${_existing!.rejectionReason}" : ""}. Please update and resubmit.';
-        break;
-      default:
-        color = Colors.orange;
-        icon = Icons.hourglass_bottom;
-        text = 'Pending admin review';
-    }
-
-    return Card(
-      color: color.withOpacity(0.08),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(width: 10),
-            Expanded(child: Text(text, style: TextStyle(color: color))),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Medical verification')),
+      appBar: AppBar(title: const Text('Medical information')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -137,8 +100,26 @@ class _MedicalVerificationScreenState extends State<MedicalVerificationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _statusBanner(),
-            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _hasExisting
+                          ? 'This is visible to requesters after you accept their blood request.'
+                          : 'Fill this in so requesters can review your health info once you accept their request.',
+                      style: TextStyle(color: Colors.blue[900], fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
             const Text('Personal information',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
@@ -186,7 +167,7 @@ class _MedicalVerificationScreenState extends State<MedicalVerificationScreen> {
                 onPressed: _isSubmitting ? null : _submit,
                 child: _isSubmitting
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(_existing == null ? 'Submit for review' : 'Resubmit'),
+                    : Text(_hasExisting ? 'Update' : 'Save'),
               ),
             ),
             const SizedBox(height: 24),

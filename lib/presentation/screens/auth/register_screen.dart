@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/auth_provider.dart';
-import '../dashboard/dashboard_screen.dart';
+import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -59,11 +59,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       label: const Text('Requester'),
                       selected: _selectedRole == 'requester',
                       onSelected: (_) => setState(() => _selectedRole = 'requester'),
-                    ),
-                    ChoiceChip(
-                      label: const Text('Admin'),
-                      selected: _selectedRole == 'admin',
-                      onSelected: (_) => setState(() => _selectedRole = 'admin'),
                     ),
                   ],
                 ),
@@ -154,6 +149,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           _emailController.text.trim(),
                           _passwordController.text.trim(),
                         );
+
                         if (success) {
                           final uid = authProvider.currentUser?.uid;
                           if (uid != null) {
@@ -172,10 +168,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               }
                             }
                           }
-                        }
-                        if (success && context.mounted) {
-                          Navigator.pushReplacement(context,
-                              MaterialPageRoute(builder: (_) => const DashboardScreen()));
+
+                          // Sign the new account out immediately, so the user
+                          // must log in fresh rather than being auto-dropped
+                          // into their dashboard.
+                          await authProvider.logout();
+
+                          if (context.mounted) {
+                            await showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Account created 🎉'),
+                                content: const Text(
+                                    'Please log in with your new email and password to continue.'),
+                                actions: [
+                                  ElevatedButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('Go to login'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (context.mounted) {
+                              Navigator.pushReplacement(context,
+                                  MaterialPageRoute(builder: (_) => const LoginScreen()));
+                            }
+                          }
                         }
                       }
                     },

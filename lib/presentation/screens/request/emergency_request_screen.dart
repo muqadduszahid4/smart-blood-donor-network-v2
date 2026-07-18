@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/request_provider.dart';
+import '../../../providers/hospital_provider.dart';
 import '../../../data/models/request_model.dart';
-
+import '../../../data/models/hospital_model.dart';
+import '../settings/edit_profile_screen.dart';
 class EmergencyRequestScreen extends StatefulWidget {
   const EmergencyRequestScreen({super.key});
 
@@ -16,14 +18,61 @@ class EmergencyRequestScreen extends StatefulWidget {
 class _EmergencyRequestScreenState extends State<EmergencyRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _unitsController = TextEditingController(text: '1');
-  final _hospitalController = TextEditingController();
   final _notesController = TextEditingController();
   final _phoneController = TextEditingController();
 
   String? _selectedBloodGroup;
   bool _isFetchingLocation = false;
 
+  List<String> _cities = [];
+  String? _selectedCity;
+  bool _isLoadingCities = true;
+
+  List<HospitalModel> _hospitalsInCity = [];
+  HospitalModel? _selectedHospital;
+  bool _isLoadingHospitals = false;
+
   final List<String> _bloodGroups = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCities();
+  }
+
+  Future<void> _loadCities() async {
+    final hospitalProvider = Provider.of<HospitalProvider>(context, listen: false);
+    final cities = await hospitalProvider.fetchDistinctCities();
+    if (mounted) {
+      setState(() {
+        _cities = cities;
+        _isLoadingCities = false;
+      });
+    }
+  }
+
+  Future<void> _onCityChanged(String? city) async {
+    setState(() {
+      _selectedCity = city;
+      _selectedHospital = null;
+      _hospitalsInCity = [];
+      _isLoadingHospitals = true;
+    });
+
+    if (city == null) {
+      setState(() => _isLoadingHospitals = false);
+      return;
+    }
+
+    final hospitalProvider = Provider.of<HospitalProvider>(context, listen: false);
+    final hospitals = await hospitalProvider.fetchHospitalsByCity(city);
+    if (mounted) {
+      setState(() {
+        _hospitalsInCity = hospitals;
+        _isLoadingHospitals = false;
+      });
+    }
+  }
 
   Future<Position?> _getCurrentLocation() async {
     setState(() => _isFetchingLocation = true);
@@ -117,14 +166,68 @@ class _EmergencyRequestScreenState extends State<EmergencyRequestScreen> {
               ),
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _hospitalController,
+              _isLoadingCities
+                  ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: LinearProgressIndicator(),
+              )
+                  : DropdownButtonFormField<String>(
+                value: _selectedCity,
                 decoration: const InputDecoration(
-                    labelText: 'Hospital name', border: OutlineInputBorder()),
-                validator: (value) =>
-                (value == null || value.isEmpty) ? 'Enter hospital name' : null,
+                    labelText: 'City',
+                    prefixIcon: Icon(Icons.location_city),
+                    border: OutlineInputBorder()),
+                items: _cities
+                    .map((city) => DropdownMenuItem(value: city, child: Text(city)))
+                    .toList(),
+                onChanged: _onCityChanged,
+                validator: (value) => value == null ? 'Select a city' : null,
               ),
               const SizedBox(height: 16),
+
+              if (_selectedCity != null) ...[
+                _isLoadingHospitals
+                    ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: LinearProgressIndicator(),
+                )
+                    : _hospitalsInCity.isEmpty
+                    ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No hospitals or blood banks listed for $_selectedCity yet.',
+                    style: TextStyle(color: Colors.orange[800], fontSize: 13),
+                  ),
+                )
+                    : DropdownButtonFormField<HospitalModel>(
+                  value: _selectedHospital,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Hospital / blood bank',
+                      prefixIcon: Icon(Icons.local_hospital),
+                      border: OutlineInputBorder()),
+                  items: _hospitalsInCity
+                      .map((h) => DropdownMenuItem(
+                    value: h,
+                    child: Text(
+                      '${h.name}${h.type == 'blood_bank' ? ' (Blood bank)' : ''}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ))
+                      .toList(),
+                  onChanged: (value) => setState(() => _selectedHospital = value),
+                  validator: (value) =>
+                  value == null ? 'Select a hospital or blood bank' : null,
+                ),
+                if (_selectedHospital != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '${_selectedHospital!.address}\nPhone: ${_selectedHospital!.phone}',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 16),
+              ],
 
               TextFormField(
                 controller: _phoneController,
@@ -193,7 +296,8 @@ class _EmergencyRequestScreenState extends State<EmergencyRequestScreen> {
                       requesterPhone: _phoneController.text.trim(),
                       bloodGroup: _selectedBloodGroup!,
                       units: int.parse(_unitsController.text),
-                      hospitalName: _hospitalController.text.trim(),
+                      hospitalName: _selectedHospital!.name,
+                      city: _selectedCity,
                       notes: _notesController.text.trim(),
                       latitude: position.latitude,
                       longitude: position.longitude,
@@ -214,6 +318,17 @@ class _EmergencyRequestScreenState extends State<EmergencyRequestScreen> {
                       height: 20,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : const Text('Send emergency request'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.person_outline),
+                  label: const Text('Update profile'),
+                  onPressed: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const EditProfileScreen())),
                 ),
               ),
             ],

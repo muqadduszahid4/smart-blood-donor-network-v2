@@ -18,10 +18,22 @@ class _HospitalDirectoryScreenState extends State<HospitalDirectoryScreen> {
   String _filter = 'All';
   bool _isLoading = true;
 
+  final TextEditingController _citySearchController = TextEditingController();
+  String _citySearch = '';
+
   @override
   void initState() {
     super.initState();
     _loadAll();
+    _citySearchController.addListener(() {
+      setState(() => _citySearch = _citySearchController.text.trim().toLowerCase());
+    });
+  }
+
+  @override
+  void dispose() {
+    _citySearchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -54,18 +66,33 @@ class _HospitalDirectoryScreenState extends State<HospitalDirectoryScreen> {
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
+  Future<void> _openWhatsApp(HospitalModel place) async {
+    final rawNumber = (place.whatsapp?.isNotEmpty == true) ? place.whatsapp! : place.phone;
+    String digits = rawNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('0')) digits = '92${digits.substring(1)}';
+    final uri = Uri.parse('https://wa.me/$digits');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Future<void> _openMap(double lat, double lng) async {
     final uri = Uri.parse('https://www.openstreetmap.org/?mlat=$lat&mlon=$lng#map=16/$lat/$lng');
     if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   List<HospitalModel> get _filteredPlaces {
-    if (_filter == 'All') return _allPlaces;
-    if (_filter == 'Favorites') {
-      return _allPlaces.where((p) => _favorites.contains(p.id)).toList();
+    List<HospitalModel> base;
+    if (_filter == 'All') {
+      base = _allPlaces;
+    } else if (_filter == 'Favorites') {
+      base = _allPlaces.where((p) => _favorites.contains(p.id)).toList();
+    } else {
+      final typeFilter = _filter == 'Hospitals' ? 'hospital' : 'blood_bank';
+      base = _allPlaces.where((p) => p.type == typeFilter).toList();
     }
-    final typeFilter = _filter == 'Hospitals' ? 'hospital' : 'blood_bank';
-    return _allPlaces.where((p) => p.type == typeFilter).toList();
+    if (_citySearch.isEmpty) return base;
+    return base.where((p) => p.city.toLowerCase().contains(_citySearch)).toList();
   }
 
   @override
@@ -82,7 +109,21 @@ class _HospitalDirectoryScreenState extends State<HospitalDirectoryScreen> {
           : Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: TextField(
+              controller: _citySearchController,
+              decoration: InputDecoration(
+                hintText: 'Search by city',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+                contentPadding:
+                const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -100,6 +141,7 @@ class _HospitalDirectoryScreenState extends State<HospitalDirectoryScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 8),
           Expanded(
             child: _filteredPlaces.isEmpty
                 ? const Center(child: Text('No places found'))
@@ -134,6 +176,11 @@ class _HospitalDirectoryScreenState extends State<HospitalDirectoryScreen> {
                                       style: const TextStyle(
                                           fontWeight: FontWeight.w600, fontSize: 15)),
                                   const SizedBox(height: 2),
+                                  Text(place.city,
+                                      style: TextStyle(
+                                          color: Colors.red[700],
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600)),
                                   Text(place.address,
                                       style: TextStyle(
                                           color: Colors.grey[600], fontSize: 12)),
@@ -157,16 +204,24 @@ class _HospitalDirectoryScreenState extends State<HospitalDirectoryScreen> {
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                icon: const Icon(Icons.call, size: 18, color: Colors.green),
-                                label: const Text('Call'),
+                                icon: const Icon(Icons.call, size: 16, color: Colors.green),
+                                label: const Text('Call', style: TextStyle(fontSize: 12)),
                                 onPressed: () => _callNumber(place.phone),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: OutlinedButton.icon(
-                                icon: const Icon(Icons.map, size: 18, color: Colors.blue),
-                                label: const Text('Map'),
+                                icon: const Icon(Icons.chat, size: 16, color: Colors.teal),
+                                label: const Text('WhatsApp', style: TextStyle(fontSize: 12)),
+                                onPressed: () => _openWhatsApp(place),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.map, size: 16, color: Colors.blue),
+                                label: const Text('Map', style: TextStyle(fontSize: 12)),
                                 onPressed: () =>
                                     _openMap(place.latitude, place.longitude),
                               ),

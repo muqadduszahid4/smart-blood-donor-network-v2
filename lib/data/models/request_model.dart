@@ -6,6 +6,7 @@ class RequestModel {
   final String bloodGroup;
   final int units;
   final String hospitalName;
+  final String? city;
   final String notes;
   final double latitude;
   final double longitude;
@@ -13,6 +14,8 @@ class RequestModel {
   final String? acceptedByName;
   final String? donorId;
   final String? donorPhone;
+  final String? requesterMedicalStatus;
+  final String? requesterMedicalRejectionReason;
   final DateTime createdAt;
 
   RequestModel({
@@ -23,6 +26,7 @@ class RequestModel {
     required this.bloodGroup,
     required this.units,
     required this.hospitalName,
+    this.city,
     required this.notes,
     required this.latitude,
     required this.longitude,
@@ -30,6 +34,8 @@ class RequestModel {
     this.acceptedByName,
     this.donorId,
     this.donorPhone,
+    this.requesterMedicalStatus,
+    this.requesterMedicalRejectionReason,
     required this.createdAt,
   });
 
@@ -42,6 +48,7 @@ class RequestModel {
       'bloodGroup': bloodGroup,
       'units': units,
       'hospitalName': hospitalName,
+      'city': city,
       'notes': notes,
       'latitude': latitude,
       'longitude': longitude,
@@ -49,6 +56,8 @@ class RequestModel {
       'acceptedByName': acceptedByName,
       'donorId': donorId,
       'donorPhone': donorPhone,
+      'requesterMedicalStatus': requesterMedicalStatus,
+      'requesterMedicalRejectionReason': requesterMedicalRejectionReason,
       'createdAt': createdAt.toIso8601String(),
     };
   }
@@ -62,6 +71,7 @@ class RequestModel {
       bloodGroup: map['bloodGroup'] ?? '',
       units: map['units'] ?? 1,
       hospitalName: map['hospitalName'] ?? '',
+      city: map['city'],
       notes: map['notes'] ?? '',
       latitude: (map['latitude'] ?? 0).toDouble(),
       longitude: (map['longitude'] ?? 0).toDouble(),
@@ -69,6 +79,8 @@ class RequestModel {
       acceptedByName: map['acceptedByName'],
       donorId: map['donorId'],
       donorPhone: map['donorPhone'],
+      requesterMedicalStatus: map['requesterMedicalStatus'],
+      requesterMedicalRejectionReason: map['requesterMedicalRejectionReason'],
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'])
           : DateTime.now(),
