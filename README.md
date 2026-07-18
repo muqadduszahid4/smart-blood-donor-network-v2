@@ -138,7 +138,7 @@ Flutter · Firebase (Auth, Firestore, Cloud Messaging) · Provider · flutter\_m
 
 📱 \*\*APK:\*\* \[Download app-release.apk (v1.1.0)](https://github.com/muqadduszahid4/smart-blood-donor-network-v2/releases/download/v1.1.0/app-release.apk)
 
-🎥 \*\*Demo Video:\*\* Coming soon
+🎥 \*\*Demo Video:\*\* \[Watch demo (v1.1.0)](https://github.com/muqadduszahid4/smart-blood-donor-network-v2/releases/download/v1.1.0/WhatsApp.Video.2026-07-09.at.16.21.53.mp4)
 
 
 
